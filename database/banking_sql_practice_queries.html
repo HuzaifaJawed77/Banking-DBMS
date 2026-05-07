@@ -1,0 +1,825 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.wrap{padding:1rem 0;font-family:var(--font-sans)}
+.top-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem;align-items:center}
+.search-wrap{flex:1;min-width:160px}
+input[type=text]{width:100%;font-size:13px}
+.cats{display:flex;gap:5px;flex-wrap:wrap}
+.cat{padding:4px 11px;border-radius:20px;border:0.5px solid var(--color-border-secondary);font-size:12px;cursor:pointer;background:var(--color-background-secondary);color:var(--color-text-secondary);transition:all .12s}
+.cat.on{background:var(--color-background-primary);color:var(--color-text-primary);border-color:var(--color-border-primary);font-weight:500}
+.count{font-size:12px;color:var(--color-text-secondary);margin-bottom:10px}
+.qcard{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);margin-bottom:10px;overflow:hidden}
+.qhead{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;cursor:pointer;user-select:none}
+.qnum{font-size:11px;font-weight:500;color:var(--color-text-secondary);min-width:28px;padding-top:1px}
+.qtitle{flex:1;font-size:13px;font-weight:500;color:var(--color-text-primary);line-height:1.5}
+.qbadge{font-size:10px;font-weight:500;padding:2px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0}
+.b-join{background:#E6F1FB;color:#0C447C}
+.b-agg{background:#E1F5EE;color:#085041}
+.b-sub{background:#EEEDFE;color:#26215C}
+.b-filt{background:#FAEEDA;color:#633806}
+.b-adv{background:#FAECE7;color:#4A1B0C}
+.b-dml{background:#EAF3DE;color:#27500A}
+@media(prefers-color-scheme:dark){
+.b-join{background:#0C447C;color:#B5D4F4}.b-agg{background:#085041;color:#9FE1CB}
+.b-sub{background:#26215C;color:#CECBF6}.b-filt{background:#633806;color:#FAC775}
+.b-adv{background:#4A1B0C;color:#F5C4B3}.b-dml{background:#27500A;color:#C0DD97}
+}
+.qarrow{font-size:14px;color:var(--color-text-secondary);transition:transform .2s;flex-shrink:0;padding-top:1px}
+.qarrow.open{transform:rotate(90deg)}
+.qbody{display:none;border-top:0.5px solid var(--color-border-tertiary)}
+.qbody.open{display:block}
+.explain{padding:10px 14px;font-size:12px;color:var(--color-text-secondary);line-height:1.6;background:var(--color-background-secondary)}
+.copy-btn{position:absolute;top:8px;right:8px;font-size:11px;padding:3px 9px;border-radius:var(--border-radius-md);border:0.5px solid #475569;background:#334155;color:#CBD5E1;cursor:pointer}
+.copy-btn:hover{background:#475569}
+pre{font-family:var(--font-mono);font-size:12px;line-height:1.7;color:#E2E8F0;white-space:pre;overflow-x:auto}
+.kw{color:#93C5FD}.fn{color:#6EE7B7}.str{color:#FCD34D}.cm{color:#64748B}
+.hidden{display:none!important}
+</style>
+
+<div class="wrap">
+<h2 class="sr-only">Banking DBMS SQL practice queries — 50 queries organized by category</h2>
+
+<div class="top-bar">
+  <div class="search-wrap">
+    <input type="text" id="srch" placeholder="Search queries..." oninput="filter()">
+  </div>
+</div>
+
+<div class="cats">
+  <div class="cat on" onclick="setCat('all',this)">All</div>
+  <div class="cat" onclick="setCat('join',this)">JOIN</div>
+  <div class="cat" onclick="setCat('agg',this)">Aggregation</div>
+  <div class="cat" onclick="setCat('sub',this)">Subquery</div>
+  <div class="cat" onclick="setCat('filt',this)">Filter / WHERE</div>
+  <div class="cat" onclick="setCat('adv',this)">Advanced</div>
+  <div class="cat" onclick="setCat('dml',this)">INSERT / UPDATE / DELETE</div>
+</div>
+
+<div class="count" id="cnt" style="margin-top:10px"></div>
+<div id="list"></div>
+</div>
+
+<script>
+const Q=[
+{n:1,cat:'join',badge:'JOIN',badgeClass:'b-join',
+title:'All customers with their account numbers and branch name',
+explain:'3-way INNER JOIN: Customer → CustomerAccount → Account → Branch. Shows how M:N ownership is resolved at query time.',
+sql:`SELECT c.Customer_ID,
+       CONCAT(c.First_Name,' ',c.Last_Name) AS Customer_Name,
+       a.Account_Number, a.Account_Type,
+       a.Balance, b.Branch_Name
+FROM   Customer c
+JOIN   Customer_Account ca ON c.Customer_ID = ca.Customer_ID
+JOIN   Account a           ON ca.Account_ID  = a.Account_ID
+JOIN   Branch b            ON a.Branch_ID    = b.Branch_ID
+ORDER  BY c.Customer_ID;`},
+
+{n:2,cat:'join',badge:'JOIN',badgeClass:'b-join',
+title:'All transactions with the employee who processed them',
+explain:'LEFT JOIN so transactions with no assigned employee still appear. Shows NULL in Processed_By for those rows.',
+sql:`SELECT t.Transaction_ID, t.Transaction_Date,
+       t.Transaction_Type, t.Amount,
+       CONCAT(e.First_Name,' ',e.Last_Name) AS Processed_By,
+       b.Branch_Code
+FROM   Transaction t
+LEFT JOIN Employee e ON t.Employee_ID = e.Employee_ID
+LEFT JOIN Branch b   ON e.Branch_ID   = b.Branch_ID
+ORDER  BY t.Transaction_Date DESC;`},
+
+{n:3,cat:'join',badge:'JOIN',badgeClass:'b-join',
+title:'All active loans with customer and branch details',
+explain:'Simple 3-way JOIN filtering only Active loans. Good for showing WHERE with JOIN together.',
+sql:`SELECT l.Loan_ID, l.Loan_Amount, l.Interest_Rate,
+       l.Remaining_Balance, l.Approval_Status,
+       CONCAT(c.First_Name,' ',c.Last_Name) AS Customer_Name,
+       b.Branch_Name
+FROM   Loan l
+JOIN   Customer c ON l.Customer_ID = c.Customer_ID
+JOIN   Branch b   ON l.Branch_ID   = b.Branch_ID
+WHERE  l.Approval_Status = 'Approved'
+ORDER  BY l.Remaining_Balance DESC;`},
+
+{n:4,cat:'join',badge:'JOIN',badgeClass:'b-join',
+title:'All cards issued with customer and account info',
+explain:'Shows card type, status, expiry alongside the account it is linked to and its owner.',
+sql:`SELECT cd.Card_ID, cd.Card_Number, cd.Card_Type,
+       cd.Card_Status, cd.Expiration_Date,
+       CONCAT(c.First_Name,' ',c.Last_Name) AS Card_Holder,
+       a.Account_Number
+FROM   Card cd
+JOIN   Customer c ON cd.Customer_ID = c.Customer_ID
+JOIN   Account a  ON cd.Account_ID  = a.Account_ID
+ORDER  BY cd.Card_Status, cd.Expiration_Date;`},
+
+{n:5,cat:'join',badge:'JOIN',badgeClass:'b-join',
+title:'Inter-bank transfers sent to external customers',
+explain:'Joins Transaction → Transfer subtype → ExternalCustomer. Shows only rows that are transfers with an external recipient.',
+sql:`SELECT t.Transaction_ID, t.Transaction_Date,
+       t.Amount, tr.Transfer_Fee,
+       tr.Destination_Bank,
+       CONCAT(ec.First_Name,' ',ec.Last_Name) AS Receiver,
+       ec.IBAN_Number,
+       a.Account_Number AS Sender_Account
+FROM   Transaction t
+JOIN   Transfer tr         ON t.Transaction_ID = tr.Transaction_ID
+JOIN   External_Customer ec ON t.ECustomer_ID  = ec.ECustomer_ID
+JOIN   Account a           ON t.Sender_Account_ID = a.Account_ID
+ORDER  BY t.Transaction_Date DESC;`},
+
+{n:6,cat:'join',badge:'JOIN',badgeClass:'b-join',
+title:'Loan payment history with customer and account details',
+explain:'Full repayment trail — who paid, from which account, how much, and what balance remains.',
+sql:`SELECT lp.Payment_ID, lp.Payment_Date,
+       lp.Payment_Amount, lp.Remaining_Balance,
+       lp.Payment_Status,
+       CONCAT(c.First_Name,' ',c.Last_Name) AS Customer_Name,
+       a.Account_Number AS Paid_From
+FROM   Loan_Payment lp
+JOIN   Customer c ON lp.Customer_ID = c.Customer_ID
+JOIN   Account a  ON lp.Account_ID  = a.Account_ID
+JOIN   Loan l     ON lp.Loan_ID     = l.Loan_ID
+ORDER  BY lp.Loan_ID, lp.Payment_Date;`},
+
+{n:7,cat:'join',badge:'JOIN',badgeClass:'b-join',
+title:'Employees with their role specialization (all roles)',
+explain:'LEFT JOINs to all three subtype tables so every employee appears regardless of role. NULL means no sub-role assigned.',
+sql:`SELECT e.Employee_ID,
+       CONCAT(e.First_Name,' ',e.Last_Name) AS Employee_Name,
+       e.Position, b.Branch_Name,
+       m.Department        AS Mgr_Dept,
+       tl.Counter_No       AS Teller_Counter,
+       lo.Specialization   AS LO_Spec
+FROM   Employee e
+JOIN   Branch b             ON e.Branch_ID   = b.Branch_ID
+LEFT JOIN Manager m         ON e.Employee_ID = m.Employee_ID
+LEFT JOIN Teller tl         ON e.Employee_ID = tl.Employee_ID
+LEFT JOIN Loan_Officer lo   ON e.Employee_ID = lo.Employee_ID;`},
+
+{n:8,cat:'join',badge:'JOIN',badgeClass:'b-join',
+title:'Joint account owners — accounts with more than one customer',
+explain:'Self-referencing: find CustomerAccount rows where the same Account_ID appears more than once.',
+sql:`SELECT a.Account_Number, a.Account_Type, a.Balance,
+       CONCAT(c.First_Name,' ',c.Last_Name) AS Owner_Name,
+       ca.Ownership_Share
+FROM   Customer_Account ca
+JOIN   Customer c ON ca.Customer_ID = c.Customer_ID
+JOIN   Account a  ON ca.Account_ID  = a.Account_ID
+WHERE  ca.Account_ID IN (
+    SELECT Account_ID FROM Customer_Account
+    GROUP BY Account_ID HAVING COUNT(*) > 1
+)
+ORDER  BY a.Account_Number;`},
+
+{n:9,cat:'join',badge:'JOIN',badgeClass:'b-join',
+title:'Individual customers with their NIC and income level',
+explain:'Joins Customer base table with IndividualCustomer subtype to show personal details.',
+sql:`SELECT c.Customer_ID,
+       CONCAT(c.First_Name,' ',c.Last_Name) AS Full_Name,
+       c.Email, c.Phone,
+       ic.Nationality, ic.Income_Level
+FROM   Customer c
+JOIN   Individual_Customer ic ON c.Customer_ID = ic.Customer_ID
+ORDER  BY c.Last_Name;`},
+
+{n:10,cat:'join',badge:'JOIN',badgeClass:'b-join',
+title:'Corporate customers with company registration info',
+explain:'Joins Customer with CorporateCustomer subtype for business account holders.',
+sql:`SELECT c.Customer_ID,
+       CONCAT(c.First_Name,' ',c.Last_Name) AS Contact_Name,
+       cc.Company_Name, cc.Reg_Name,
+       cc.Industry_Type, c.Email
+FROM   Customer c
+JOIN   Corporate_Customer cc ON c.Customer_ID = cc.Customer_ID
+ORDER  BY cc.Company_Name;`},
+
+{n:11,cat:'agg',badge:'Aggregation',badgeClass:'b-agg',
+title:'Total and average account balance per branch',
+explain:'GROUP BY Branch with SUM, AVG, MAX, COUNT — classic aggregation question.',
+sql:`SELECT b.Branch_Name, b.Branch_Code,
+       COUNT(a.Account_ID)   AS Total_Accounts,
+       SUM(a.Balance)         AS Total_Balance,
+       AVG(a.Balance)         AS Avg_Balance,
+       MAX(a.Balance)         AS Highest_Balance,
+       MIN(a.Balance)         AS Lowest_Balance
+FROM   Branch b
+LEFT JOIN Account a ON b.Branch_ID = a.Branch_ID
+GROUP  BY b.Branch_ID, b.Branch_Name, b.Branch_Code
+ORDER  BY Total_Balance DESC;`},
+
+{n:12,cat:'agg',badge:'Aggregation',badgeClass:'b-agg',
+title:'Monthly transaction volume and total amount',
+explain:'YEAR() and MONTH() functions to group by time period. Good for showing date functions.',
+sql:`SELECT YEAR(Transaction_Date)  AS Year,
+       MONTH(Transaction_Date) AS Month,
+       Transaction_Type,
+       COUNT(*)               AS Txn_Count,
+       SUM(Amount)            AS Total_Amount,
+       AVG(Amount)            AS Avg_Amount
+FROM   Transaction
+GROUP  BY Year, Month, Transaction_Type
+ORDER  BY Year DESC, Month DESC;`},
+
+{n:13,cat:'agg',badge:'Aggregation',badgeClass:'b-agg',
+title:'Total loan amount borrowed per customer',
+explain:'SUM and COUNT on Loan grouped by customer. Filter on Approved only using WHERE before GROUP BY.',
+sql:`SELECT c.Customer_ID,
+       CONCAT(c.First_Name,' ',c.Last_Name) AS Customer_Name,
+       COUNT(l.Loan_ID)      AS Total_Loans,
+       SUM(l.Loan_Amount)    AS Total_Borrowed,
+       AVG(l.Interest_Rate)  AS Avg_Interest_Rate,
+       MAX(l.Loan_Amount)    AS Largest_Loan
+FROM   Customer c
+JOIN   Loan l ON c.Customer_ID = l.Customer_ID
+WHERE  l.Approval_Status = 'Approved'
+GROUP  BY c.Customer_ID, c.First_Name, c.Last_Name
+ORDER  BY Total_Borrowed DESC;`},
+
+{n:14,cat:'agg',badge:'Aggregation',badgeClass:'b-agg',
+title:'Total loan paid vs outstanding balance per loan',
+explain:'SUM on LoanPayment grouped by Loan_ID. Calculates remaining using arithmetic on aggregates.',
+sql:`SELECT l.Loan_ID, l.Loan_Amount,
+       CONCAT(c.First_Name,' ',c.Last_Name) AS Customer_Name,
+       SUM(lp.Payment_Amount)                 AS Total_Paid,
+       l.Loan_Amount - SUM(lp.Payment_Amount) AS Outstanding_Balance,
+       COUNT(lp.Payment_ID)                   AS Payment_Count
+FROM   Loan l
+JOIN   Customer c    ON l.Customer_ID  = c.Customer_ID
+JOIN   Loan_Payment lp ON l.Loan_ID   = lp.Loan_ID
+GROUP  BY l.Loan_ID, l.Loan_Amount, c.First_Name, c.Last_Name
+ORDER  BY Outstanding_Balance DESC;`},
+
+{n:15,cat:'agg',badge:'Aggregation',badgeClass:'b-agg',
+title:'Count of each card type (Debit vs Credit) per branch',
+explain:'GROUP BY two columns — Branch and Card_Type — to get a breakdown table.',
+sql:`SELECT b.Branch_Name, cd.Card_Type,
+       COUNT(cd.Card_ID)  AS Card_Count,
+       SUM(CASE WHEN cd.Card_Status='Active'  THEN 1 ELSE 0 END) AS Active,
+       SUM(CASE WHEN cd.Card_Status='Blocked' THEN 1 ELSE 0 END) AS Blocked,
+       SUM(CASE WHEN cd.Card_Status='Expired' THEN 1 ELSE 0 END) AS Expired
+FROM   Card cd
+JOIN   Account a ON cd.Account_ID = a.Account_ID
+JOIN   Branch b  ON a.Branch_ID   = b.Branch_ID
+GROUP  BY b.Branch_Name, cd.Card_Type
+ORDER  BY b.Branch_Name;`},
+
+{n:16,cat:'agg',badge:'Aggregation',badgeClass:'b-agg',
+title:'Total deposits and withdrawals per account (CASE WHEN)',
+explain:'Conditional aggregation with CASE WHEN inside SUM — separates deposit and withdrawal totals in one pass.',
+sql:`SELECT a.Account_Number, a.Account_Type,
+       SUM(CASE WHEN t.Transaction_Type='Deposit'
+           THEN t.Amount ELSE 0 END)    AS Total_Deposits,
+       SUM(CASE WHEN t.Transaction_Type='Withdrawal'
+           THEN t.Amount ELSE 0 END)    AS Total_Withdrawals,
+       COUNT(t.Transaction_ID)          AS Total_Transactions
+FROM   Account a
+LEFT JOIN Transaction t
+       ON a.Account_ID = t.Sender_Account_ID
+       OR a.Account_ID = t.Receiver_Account_ID
+GROUP  BY a.Account_ID, a.Account_Number, a.Account_Type
+ORDER  BY Total_Transactions DESC;`},
+
+{n:17,cat:'agg',badge:'Aggregation',badgeClass:'b-agg',
+title:'Number of employees per branch and per position',
+explain:'GROUP BY Branch and Position to see staffing breakdown across all branches.',
+sql:`SELECT b.Branch_Name,
+       e.Position,
+       COUNT(e.Employee_ID) AS Staff_Count
+FROM   Employee e
+JOIN   Branch b ON e.Branch_ID = b.Branch_ID
+GROUP  BY b.Branch_Name, e.Position
+ORDER  BY b.Branch_Name, e.Position;`},
+
+{n:18,cat:'agg',badge:'Aggregation',badgeClass:'b-agg',
+title:'Branches with more than 2 accounts (HAVING)',
+explain:'HAVING filters after GROUP BY — cannot use WHERE for this. Classic HAVING question.',
+sql:`SELECT b.Branch_Name, b.Branch_Code,
+       COUNT(a.Account_ID) AS Account_Count,
+       SUM(a.Balance)       AS Total_Balance
+FROM   Branch b
+JOIN   Account a ON b.Branch_ID = a.Branch_ID
+GROUP  BY b.Branch_ID, b.Branch_Name, b.Branch_Code
+HAVING COUNT(a.Account_ID) > 2
+ORDER  BY Account_Count DESC;`},
+
+{n:19,cat:'agg',badge:'Aggregation',badgeClass:'b-agg',
+title:'Average transaction amount per transaction type',
+explain:'Simple GROUP BY on a single column with multiple aggregate functions.',
+sql:`SELECT Transaction_Type,
+       COUNT(*)        AS Total_Count,
+       SUM(Amount)     AS Total_Amount,
+       AVG(Amount)     AS Avg_Amount,
+       MAX(Amount)     AS Max_Amount,
+       MIN(Amount)     AS Min_Amount
+FROM   Transaction
+GROUP  BY Transaction_Type;`},
+
+{n:20,cat:'agg',badge:'Aggregation',badgeClass:'b-agg',
+title:'Total transfer fees collected per destination bank',
+explain:'Joins Transaction with Transfer subtype, groups by Destination_Bank.',
+sql:`SELECT tr.Destination_Bank,
+       COUNT(tr.Transaction_ID) AS Transfer_Count,
+       SUM(tr.Transfer_Fee)     AS Total_Fees_Collected,
+       SUM(t.Amount)            AS Total_Transferred
+FROM   Transfer tr
+JOIN   Transaction t ON tr.Transaction_ID = t.Transaction_ID
+GROUP  BY tr.Destination_Bank
+ORDER  BY Total_Fees_Collected DESC;`},
+
+{n:21,cat:'sub',badge:'Subquery',badgeClass:'b-sub',
+title:'Customers with total balance above the overall average',
+explain:'Correlated subquery: outer query compares each customer total against the global average from a subquery.',
+sql:`SELECT c.Customer_ID,
+       CONCAT(c.First_Name,' ',c.Last_Name) AS Customer_Name,
+       SUM(a.Balance) AS Total_Balance
+FROM   Customer c
+JOIN   Customer_Account ca ON c.Customer_ID = ca.Customer_ID
+JOIN   Account a           ON ca.Account_ID  = a.Account_ID
+GROUP  BY c.Customer_ID, c.First_Name, c.Last_Name
+HAVING SUM(a.Balance) > (SELECT AVG(Balance) FROM Account)
+ORDER  BY Total_Balance DESC;`},
+
+{n:22,cat:'sub',badge:'Subquery',badgeClass:'b-sub',
+title:'Customers who have never taken a loan',
+explain:'NOT IN subquery — finds customers whose ID does not appear in the Loan table at all.',
+sql:`SELECT c.Customer_ID,
+       CONCAT(c.First_Name,' ',c.Last_Name) AS Customer_Name,
+       c.Email, c.Phone
+FROM   Customer c
+WHERE  c.Customer_ID NOT IN (
+    SELECT DISTINCT Customer_ID FROM Loan
+)
+ORDER  BY c.Last_Name;`},
+
+{n:23,cat:'sub',badge:'Subquery',badgeClass:'b-sub',
+title:'Accounts with balance higher than the branch average',
+explain:'Correlated subquery in WHERE — compares each account balance to the average of accounts in its own branch.',
+sql:`SELECT a.Account_ID, a.Account_Number,
+       a.Account_Type, a.Balance,
+       b.Branch_Name
+FROM   Account a
+JOIN   Branch b ON a.Branch_ID = b.Branch_ID
+WHERE  a.Balance > (
+    SELECT AVG(a2.Balance)
+    FROM   Account a2
+    WHERE  a2.Branch_ID = a.Branch_ID
+)
+ORDER  BY b.Branch_Name, a.Balance DESC;`},
+
+{n:24,cat:'sub',badge:'Subquery',badgeClass:'b-sub',
+title:'Branch with the highest total account balance (subquery in FROM)',
+explain:'Derived table (subquery in FROM clause) used to pre-aggregate then filter the top result.',
+sql:`SELECT branch_totals.Branch_Name,
+       branch_totals.Total_Balance
+FROM (
+    SELECT b.Branch_Name,
+           SUM(a.Balance) AS Total_Balance
+    FROM   Branch b
+    JOIN   Account a ON b.Branch_ID = a.Branch_ID
+    GROUP  BY b.Branch_ID, b.Branch_Name
+) AS branch_totals
+ORDER  BY branch_totals.Total_Balance DESC
+LIMIT  1;`},
+
+{n:25,cat:'sub',badge:'Subquery',badgeClass:'b-sub',
+title:'Customers who have both a loan AND a card',
+explain:'Two IN subqueries with AND — customer must appear in both Loan and Card tables.',
+sql:`SELECT Customer_ID,
+       CONCAT(First_Name,' ',Last_Name) AS Customer_Name,
+       Email
+FROM   Customer
+WHERE  Customer_ID IN (SELECT DISTINCT Customer_ID FROM Loan)
+  AND  Customer_ID IN (SELECT DISTINCT Customer_ID FROM Card)
+ORDER  BY Last_Name;`},
+
+{n:26,cat:'sub',badge:'Subquery',badgeClass:'b-sub',
+title:'Most recent transaction for each account',
+explain:'Correlated subquery with MAX — finds the latest transaction date per account.',
+sql:`SELECT a.Account_Number, t.Transaction_ID,
+       t.Transaction_Date, t.Transaction_Type, t.Amount
+FROM   Transaction t
+JOIN   Account a ON t.Sender_Account_ID = a.Account_ID
+WHERE  t.Transaction_Date = (
+    SELECT MAX(t2.Transaction_Date)
+    FROM   Transaction t2
+    WHERE  t2.Sender_Account_ID = t.Sender_Account_ID
+)
+ORDER  BY a.Account_Number;`},
+
+{n:27,cat:'sub',badge:'Subquery',badgeClass:'b-sub',
+title:'Employees who earn more responsibility than average (loan officers above avg loan limit)',
+explain:'Subquery finds average Loan_Limit, outer query finds officers above it.',
+sql:`SELECT e.Employee_ID,
+       CONCAT(e.First_Name,' ',e.Last_Name) AS Officer_Name,
+       lo.Loan_Limit, lo.Specialization,
+       b.Branch_Name
+FROM   Loan_Officer lo
+JOIN   Employee e ON lo.Employee_ID = e.Employee_ID
+JOIN   Branch b   ON e.Branch_ID   = b.Branch_ID
+WHERE  lo.Loan_Limit > (SELECT AVG(Loan_Limit) FROM Loan_Officer)
+ORDER  BY lo.Loan_Limit DESC;`},
+
+{n:28,cat:'sub',badge:'Subquery',badgeClass:'b-sub',
+title:'Accounts that have never made any transaction',
+explain:'NOT EXISTS subquery — more efficient than NOT IN when checking existence across large tables.',
+sql:`SELECT a.Account_ID, a.Account_Number,
+       a.Account_Type, a.Balance,
+       b.Branch_Name
+FROM   Account a
+JOIN   Branch b ON a.Branch_ID = b.Branch_ID
+WHERE  NOT EXISTS (
+    SELECT 1 FROM Transaction t
+    WHERE  t.Sender_Account_ID   = a.Account_ID
+       OR  t.Receiver_Account_ID = a.Account_ID
+);`},
+
+{n:29,cat:'filt',badge:'Filter',badgeClass:'b-filt',
+title:'All overdue loan payments with days past due',
+explain:'DATEDIFF between today and Due_Date. Filters on Payment_Status = Overdue.',
+sql:`SELECT lp.Payment_ID,
+       CONCAT(c.First_Name,' ',c.Last_Name) AS Customer_Name,
+       c.Phone, c.Email,
+       lp.Payment_Amount, lp.Remaining_Balance,
+       lp.Payment_Date,
+       DATEDIFF(CURDATE(), lp.Payment_Date) AS Days_Overdue,
+       lp.Late_Fee
+FROM   Loan_Payment lp
+JOIN   Customer c ON lp.Customer_ID = c.Customer_ID
+WHERE  lp.Payment_Status = 'Overdue'
+ORDER  BY Days_Overdue DESC;`},
+
+{n:30,cat:'filt',badge:'Filter',badgeClass:'b-filt',
+title:'Cards expiring within the next 90 days',
+explain:'Date range filter using BETWEEN CURDATE() and DATE_ADD. Good for showing date functions.',
+sql:`SELECT cd.Card_ID, cd.Card_Number, cd.Card_Type,
+       cd.Expiration_Date,
+       DATEDIFF(cd.Expiration_Date, CURDATE()) AS Days_Until_Expiry,
+       CONCAT(c.First_Name,' ',c.Last_Name)    AS Card_Holder,
+       c.Email, c.Phone
+FROM   Card cd
+JOIN   Customer c ON cd.Customer_ID = c.Customer_ID
+WHERE  cd.Card_Status   = 'Active'
+  AND  cd.Expiration_Date BETWEEN CURDATE()
+                              AND DATE_ADD(CURDATE(), INTERVAL 90 DAY)
+ORDER  BY cd.Expiration_Date;`},
+
+{n:31,cat:'filt',badge:'Filter',badgeClass:'b-filt',
+title:'Transactions above a certain amount (large transactions)',
+explain:'Simple WHERE with amount threshold. Can be used for fraud detection simulation.',
+sql:`SELECT t.Transaction_ID, t.Transaction_Date,
+       t.Transaction_Type, t.Amount,
+       a_s.Account_Number AS Sender_Acc,
+       a_r.Account_Number AS Receiver_Acc,
+       CONCAT(e.First_Name,' ',e.Last_Name) AS Processed_By
+FROM   Transaction t
+LEFT JOIN Account a_s  ON t.Sender_Account_ID   = a_s.Account_ID
+LEFT JOIN Account a_r  ON t.Receiver_Account_ID  = a_r.Account_ID
+LEFT JOIN Employee e   ON t.Employee_ID          = e.Employee_ID
+WHERE  t.Amount > 50000
+ORDER  BY t.Amount DESC;`},
+
+{n:32,cat:'filt',badge:'Filter',badgeClass:'b-filt',
+title:'Saving accounts with balance below the minimum required',
+explain:'Joins Account with SavingAccount subtype and compares Balance to Min_Balance.',
+sql:`SELECT a.Account_Number,
+       CONCAT(c.First_Name,' ',c.Last_Name) AS Owner,
+       a.Balance,
+       sa.Min_Balance,
+       sa.Min_Balance - a.Balance AS Deficit,
+       b.Branch_Name
+FROM   Account a
+JOIN   Savings_Account sa ON a.Account_ID  = sa.Account_ID
+JOIN   Customer_Account ca ON a.Account_ID = ca.Account_ID
+JOIN   Customer c          ON ca.Customer_ID = c.Customer_ID
+JOIN   Branch b            ON a.Branch_ID    = b.Branch_ID
+WHERE  a.Balance < sa.Min_Balance
+ORDER  BY Deficit DESC;`},
+
+{n:33,cat:'filt',badge:'Filter',badgeClass:'b-filt',
+title:'Fixed deposits maturing in the next 6 months',
+explain:'Date filter on Maturity_Date for upcoming maturities.',
+sql:`SELECT a.Account_Number,
+       fd.Maturity_Date, fd.Fixed_Rate,
+       a.Balance,
+       DATEDIFF(fd.Maturity_Date, CURDATE()) AS Days_To_Maturity,
+       CONCAT(c.First_Name,' ',c.Last_Name)  AS Owner,
+       b.Branch_Name
+FROM   Fixed_Deposit fd
+JOIN   Account a           ON fd.Account_ID  = a.Account_ID
+JOIN   Customer_Account ca ON a.Account_ID   = ca.Account_ID
+JOIN   Customer c          ON ca.Customer_ID = c.Customer_ID
+JOIN   Branch b            ON a.Branch_ID    = b.Branch_ID
+WHERE  fd.Maturity_Date BETWEEN CURDATE()
+                            AND DATE_ADD(CURDATE(), INTERVAL 6 MONTH)
+ORDER  BY fd.Maturity_Date;`},
+
+{n:34,cat:'filt',badge:'Filter',badgeClass:'b-filt',
+title:'Search customers by name (partial match with LIKE)',
+explain:'LIKE with % wildcard for partial string matching — simulates a search bar.',
+sql:`SELECT Customer_ID,
+       CONCAT(First_Name,' ',Last_Name) AS Full_Name,
+       Email, Phone, Date_of_Birth
+FROM   Customer
+WHERE  First_Name LIKE '%Ah%'
+   OR  Last_Name  LIKE '%Ah%'
+ORDER  BY Last_Name;`},
+
+{n:35,cat:'filt',badge:'Filter',badgeClass:'b-filt',
+title:'All blocked or expired cards',
+explain:'IN clause with multiple values in WHERE — shorter than writing multiple OR conditions.',
+sql:`SELECT cd.Card_ID, cd.Card_Number, cd.Card_Type,
+       cd.Card_Status, cd.Expiration_Date,
+       CONCAT(c.First_Name,' ',c.Last_Name) AS Card_Holder,
+       a.Account_Number
+FROM   Card cd
+JOIN   Customer c ON cd.Customer_ID = c.Customer_ID
+JOIN   Account a  ON cd.Account_ID  = a.Account_ID
+WHERE  cd.Card_Status IN ('Blocked','Expired')
+ORDER  BY cd.Card_Status, cd.Expiration_Date;`},
+
+{n:36,cat:'filt',badge:'Filter',badgeClass:'b-filt',
+title:'Transactions made in a specific date range',
+explain:'BETWEEN for date range filtering. Replace dates with any range needed.',
+sql:`SELECT t.Transaction_ID, t.Transaction_Date,
+       t.Transaction_Type, t.Amount, t.Description,
+       a.Account_Number AS Sender_Account
+FROM   Transaction t
+LEFT JOIN Account a ON t.Sender_Account_ID = a.Account_ID
+WHERE  t.Transaction_Date BETWEEN '2023-01-01' AND '2023-12-31'
+ORDER  BY t.Transaction_Date;`},
+
+{n:37,cat:'adv',badge:'Advanced',badgeClass:'b-adv',
+title:'Rank customers by total balance using RANK()',
+explain:'Window function RANK() OVER — assigns a rank to each customer by total balance.',
+sql:`SELECT Customer_ID, Customer_Name, Total_Balance,
+       RANK() OVER (ORDER BY Total_Balance DESC) AS Balance_Rank
+FROM (
+    SELECT c.Customer_ID,
+           CONCAT(c.First_Name,' ',c.Last_Name) AS Customer_Name,
+           SUM(a.Balance)                        AS Total_Balance
+    FROM   Customer c
+    JOIN   Customer_Account ca ON c.Customer_ID = ca.Customer_ID
+    JOIN   Account a           ON ca.Account_ID  = a.Account_ID
+    GROUP  BY c.Customer_ID, c.First_Name, c.Last_Name
+) ranked;`},
+
+{n:38,cat:'adv',badge:'Advanced',badgeClass:'b-adv',
+title:'Running total of loan payments over time (cumulative SUM)',
+explain:'SUM() OVER with ORDER BY creates a running cumulative total — advanced window function.',
+sql:`SELECT lp.Payment_ID, lp.Payment_Date,
+       lp.Payment_Amount,
+       SUM(lp.Payment_Amount) OVER (
+           PARTITION BY lp.Loan_ID
+           ORDER BY lp.Payment_Date
+       ) AS Cumulative_Paid,
+       lp.Remaining_Balance
+FROM   Loan_Payment lp
+ORDER  BY lp.Loan_ID, lp.Payment_Date;`},
+
+{n:39,cat:'adv',badge:'Advanced',badgeClass:'b-adv',
+title:'Find duplicate account numbers (data integrity check)',
+explain:'GROUP BY with HAVING COUNT > 1 to detect any accidental duplicate account numbers.',
+sql:`SELECT Account_Number,
+       COUNT(*) AS Duplicate_Count
+FROM   Account
+GROUP  BY Account_Number
+HAVING COUNT(*) > 1;`},
+
+{n:40,cat:'adv',badge:'Advanced',badgeClass:'b-adv',
+title:'Customer transaction summary using CTE (WITH clause)',
+explain:'Common Table Expression (CTE) — defines a named temporary result set then queries it.',
+sql:`WITH CustomerTxn AS (
+    SELECT c.Customer_ID,
+           CONCAT(c.First_Name,' ',c.Last_Name) AS Customer_Name,
+           COUNT(t.Transaction_ID)              AS Txn_Count,
+           SUM(t.Amount)                        AS Total_Amount
+    FROM   Customer c
+    JOIN   Customer_Account ca ON c.Customer_ID = ca.Customer_ID
+    JOIN   Account a           ON ca.Account_ID  = a.Account_ID
+    JOIN   Transaction t
+           ON t.Sender_Account_ID = a.Account_ID
+    GROUP  BY c.Customer_ID, c.First_Name, c.Last_Name
+)
+SELECT * FROM CustomerTxn
+WHERE  Txn_Count > 1
+ORDER  BY Total_Amount DESC;`},
+
+{n:41,cat:'adv',badge:'Advanced',badgeClass:'b-adv',
+title:'Pivot-style: account type counts per branch in one row',
+explain:'Multiple CASE WHEN inside COUNT — creates a horizontal breakdown of account types per branch.',
+sql:`SELECT b.Branch_Name,
+       COUNT(CASE WHEN a.Account_Type='Savings'       THEN 1 END) AS Savings_Count,
+       COUNT(CASE WHEN a.Account_Type='Current'       THEN 1 END) AS Current_Count,
+       COUNT(CASE WHEN a.Account_Type='Fixed_Deposit' THEN 1 END) AS FD_Count,
+       COUNT(a.Account_ID)                                        AS Total
+FROM   Branch b
+LEFT JOIN Account a ON b.Branch_ID = a.Branch_ID
+GROUP  BY b.Branch_Name
+ORDER  BY Total DESC;`},
+
+{n:42,cat:'adv',badge:'Advanced',badgeClass:'b-adv',
+title:'Top 3 customers by number of transactions',
+explain:'ORDER BY aggregate DESC then LIMIT to get top N results.',
+sql:`SELECT c.Customer_ID,
+       CONCAT(c.First_Name,' ',c.Last_Name) AS Customer_Name,
+       COUNT(t.Transaction_ID)              AS Transaction_Count,
+       SUM(t.Amount)                        AS Total_Amount
+FROM   Customer c
+JOIN   Customer_Account ca ON c.Customer_ID = ca.Customer_ID
+JOIN   Account a           ON ca.Account_ID  = a.Account_ID
+JOIN   Transaction t       ON t.Sender_Account_ID = a.Account_ID
+GROUP  BY c.Customer_ID, c.First_Name, c.Last_Name
+ORDER  BY Transaction_Count DESC
+LIMIT  3;`},
+
+{n:43,cat:'adv',badge:'Advanced',badgeClass:'b-adv',
+title:'Find customers with overdue loans and their contact info',
+explain:'Combines loan status filter with customer details — useful for alerts.',
+sql:`SELECT DISTINCT c.Customer_ID,
+       CONCAT(c.First_Name,' ',c.Last_Name) AS Customer_Name,
+       c.Phone, c.Email,
+       l.Loan_ID, l.Loan_Amount,
+       lp.Remaining_Balance,
+       MAX(lp.Payment_Date) AS Last_Payment_Date
+FROM   Customer c
+JOIN   Loan l         ON c.Customer_ID = l.Customer_ID
+JOIN   Loan_Payment lp ON l.Loan_ID   = lp.Loan_ID
+WHERE  lp.Payment_Status = 'Overdue'
+GROUP  BY c.Customer_ID, c.First_Name, c.Last_Name,
+          c.Phone, c.Email, l.Loan_ID, l.Loan_Amount,
+          lp.Remaining_Balance
+ORDER  BY lp.Remaining_Balance DESC;`},
+
+{n:44,cat:'adv',badge:'Advanced',badgeClass:'b-adv',
+title:'Branch performance report: accounts, loans, employees in one query',
+explain:'Multiple LEFT JOINs with separate aggregations using subqueries per dimension.',
+sql:`SELECT b.Branch_Name,
+       COALESCE(acc.Account_Count, 0) AS Accounts,
+       COALESCE(acc.Total_Balance, 0) AS Total_Balance,
+       COALESCE(lns.Loan_Count,    0) AS Loans,
+       COALESCE(emp.Staff_Count,   0) AS Employees
+FROM   Branch b
+LEFT JOIN (
+    SELECT Branch_ID, COUNT(*) AS Account_Count,
+           SUM(Balance) AS Total_Balance
+    FROM   Account GROUP BY Branch_ID
+) acc ON b.Branch_ID = acc.Branch_ID
+LEFT JOIN (
+    SELECT Branch_ID, COUNT(*) AS Loan_Count
+    FROM   Loan GROUP BY Branch_ID
+) lns ON b.Branch_ID = lns.Branch_ID
+LEFT JOIN (
+    SELECT Branch_ID, COUNT(*) AS Staff_Count
+    FROM   Employee GROUP BY Branch_ID
+) emp ON b.Branch_ID = emp.Branch_ID
+ORDER  BY Total_Balance DESC;`},
+
+{n:45,cat:'dml',badge:'DML',badgeClass:'b-dml',
+title:'Insert a new customer and their individual subtype record',
+explain:'Two INSERT statements — first parent, then subtype. Order matters because of FK constraint.',
+sql:`INSERT INTO Customer
+    (First_Name, Last_Name, Date_of_Birth, Address, Phone, Email)
+VALUES
+    ('Zara','Siddiqui','1998-04-15',
+     'DHA Phase 6, Karachi','0312-9876543','zara@mail.com');
+
+INSERT INTO Individual_Customer
+    (Customer_ID, Nationality, Occupation, Income_Level)
+VALUES
+    (LAST_INSERT_ID(), 'Pakistani', 'Doctor', 'High');`},
+
+{n:46,cat:'dml',badge:'DML',badgeClass:'b-dml',
+title:'Open a new savings account and link it to a customer',
+explain:'Three INSERTs — Account, Savings_Account subtype, then CustomerAccount junction.',
+sql:`INSERT INTO Account
+    (Account_Number, Account_Type, Balance, Opening_Date, Branch_ID)
+VALUES ('ACC-20099','Savings', 25000.00, CURDATE(), 1);
+
+INSERT INTO Savings_Account
+    (Account_ID, Min_Balance, Interest_Rate, Withdrawal_Limit)
+VALUES (LAST_INSERT_ID(), 5000.00, 6.50, 5);
+
+INSERT INTO Customer_Account
+    (Customer_ID, Account_ID, Ownership_Share)
+VALUES (1, LAST_INSERT_ID(), 100.00);`},
+
+{n:47,cat:'dml',badge:'DML',badgeClass:'b-dml',
+title:'Update account balance after a deposit transaction',
+explain:'UPDATE with arithmetic — adds deposit amount to current balance.',
+sql:`UPDATE Account
+SET    Balance = Balance + 15000.00
+WHERE  Account_Number = 'ACC-10001';
+
+INSERT INTO Transaction
+    (Transaction_Date, Transaction_Type, Amount,
+     Description, Receiver_Account_ID)
+VALUES
+    (NOW(), 'Deposit', 15000.00,
+     'Cash deposit at branch', 1);
+
+INSERT INTO Deposit (Transaction_ID, Deposit_Method, Source_Account)
+VALUES (LAST_INSERT_ID(), 'Cash', NULL);`},
+
+{n:48,cat:'dml',badge:'DML',badgeClass:'b-dml',
+title:'Block all expired cards automatically',
+explain:'Bulk UPDATE using a WHERE condition — updates all cards where expiry date is in the past.',
+sql:`UPDATE Card
+SET    Card_Status = 'Expired'
+WHERE  Expiration_Date < CURDATE()
+  AND  Card_Status = 'Active';`},
+
+{n:49,cat:'dml',badge:'DML',badgeClass:'b-dml',
+title:'Delete rejected loan applications and their payments',
+explain:'DELETE with JOIN or subquery — removes rejected loans. CASCADE handles child records.',
+sql:`DELETE FROM Loan
+WHERE  Approval_Status = 'Rejected';`},
+
+{n:50,cat:'dml',badge:'DML',badgeClass:'b-dml',
+title:'Record a loan EMI payment and update remaining balance',
+explain:'INSERT the payment record then UPDATE the loan remaining balance in one transaction block.',
+sql:`START TRANSACTION;
+
+INSERT INTO Loan_Payment
+    (Loan_ID, Customer_ID, Account_ID,
+     Payment_Date, Payment_Amount,
+     Remaining_Balance, Payment_Status)
+VALUES (1, 1, 1, CURDATE(), 18500.00, 426000.00, 'Paid');
+
+UPDATE Account
+SET    Balance = Balance - 18500.00
+WHERE  Account_ID = 1;
+
+COMMIT;`},
+];
+
+let activeCat='all';
+
+function badge(q){
+  return `<span class="qbadge ${q.badgeClass}">${q.badge}</span>`;
+}
+
+function hl(sql){
+  return sql
+    .replace(/\b(SELECT|FROM|JOIN|LEFT JOIN|INNER JOIN|WHERE|GROUP BY|ORDER BY|HAVING|LIMIT|AS|ON|AND|OR|IN|NOT IN|EXISTS|NOT EXISTS|BETWEEN|LIKE|DISTINCT|WITH|PARTITION BY|OVER|BY|SET|UPDATE|INSERT INTO|VALUES|DELETE FROM|START TRANSACTION|COMMIT|INTO|NULL|IS NULL|IS NOT NULL|CASE|WHEN|THEN|ELSE|END|COALESCE|IF)\b/g,'<span class="kw">$1</span>')
+    .replace(/\b(COUNT|SUM|AVG|MAX|MIN|RANK|CONCAT|YEAR|MONTH|CURDATE|NOW|DATEDIFF|DATE_ADD|INTERVAL|LAST_INSERT_ID|COALESCE)\b/g,'<span class="fn">$1</span>')
+    .replace(/'([^']*)'/g,"<span class=\"str\">'$1'</span>")
+    .replace(/--(.*)/g,'<span class="cm">--$1</span>');
+}
+
+function render(){
+  const s=document.getElementById('srch').value.toLowerCase();
+  const list=document.getElementById('list');
+  let html='';let shown=0;
+  Q.forEach(q=>{
+    const catMatch=activeCat==='all'||q.cat===activeCat;
+    const textMatch=!s||q.title.toLowerCase().includes(s)||q.sql.toLowerCase().includes(s)||q.explain.toLowerCase().includes(s);
+    if(!catMatch||!textMatch){return;}
+    shown++;
+    html+=`<div class="qcard" id="qc${q.n}">
+<div class="qhead" onclick="tog(${q.n})">
+  <span class="qnum">Q${q.n}</span>
+  <span class="qtitle">${q.title}</span>
+  ${badge(q)}
+  <span class="qarrow" id="arr${q.n}">&#9656;</span>
+</div>
+<div class="qbody" id="qb${q.n}">
+  <div class="explain">${q.explain}</div>
+  <div class="code-wrap">
+    <button class="copy-btn" onclick="cp(${q.n},event)">Copy</button>
+    <pre>${hl(q.sql)}</pre>
+  </div>
+</div>
+</div>`;
+  });
+  list.innerHTML=html||'<p style="color:var(--color-text-secondary);font-size:13px;padding:1rem 0">No queries match your search.</p>';
+  document.getElementById('cnt').textContent=`Showing ${shown} of ${Q.length} queries`;
+}
+
+function tog(n){
+  const b=document.getElementById('qb'+n);
+  const a=document.getElementById('arr'+n);
+  const open=b.classList.toggle('open');
+  a.classList.toggle('open',open);
+}
+
+function setCat(c,el){
+  activeCat=c;
+  document.querySelectorAll('.cat').forEach(x=>x.classList.remove('on'));
+  el.classList.add('on');
+  render();
+}
+
+function filter(){render();}
+
+function cp(n,e){
+  e.stopPropagation();
+  const q=Q.find(x=>x.n===n);
+  if(!q)return;
+  navigator.clipboard.writeText(q.sql).catch(()=>{});
+  const btn=e.target;
+  btn.textContent='Copied!';
+  setTimeout(()=>btn.textContent='Copy',1500);
+}
+
+render();
+</script>
